@@ -1,0 +1,4 @@
+llama_index @ git+https://github.com/nithishr/llama_index.git@couchbase-vector-store
+streamlit==1.31.0
+couchbase==4.1.11
+pypdf==4.0.1
