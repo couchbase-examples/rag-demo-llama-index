@@ -1,4 +1,4 @@
-## RAG Demo using Couchbase, Stremlit, LlamaIndex, and OpenAI
+## RAG Demo using Couchbase, Streamlit, LlamaIndex, and OpenAI
 
 This is a demo app built to chat with your custom PDFs using the vector search capabilities of Couchbase to augment the OpenAI results in a Retrieval-Augmented-Generation (RAG) model.
 
@@ -20,7 +20,7 @@ For RAG, we are using LlamaIndex, Couchbase Vector Search & OpenAI. We fetch par
   `pip install -r requirements.txt`
 
 - Set the environment secrets
-  Copy the secrets.example.toml file in `streamlit` folder and rename it to `secrets.toml` and replace the placeholders with the actual values for your environment
+  Copy the `secrets.example.toml` file in `.streamlit` folder and rename it to `secrets.toml` and replace the placeholders with the actual values for your environment
 
   ```
   OPENAI_API_KEY = "<open_ai_api_key"
