@@ -16,6 +16,7 @@ For RAG, we are using LlamaIndex, Couchbase Vector Search & OpenAI. We fetch par
 ### How to Run
 
 - Install dependencies
+
   `pip install -r requirements.txt`
 
 - Set the environment secrets
@@ -37,3 +38,7 @@ For RAG, we are using LlamaIndex, Couchbase Vector Search & OpenAI. We fetch par
   ```
 
   The last two parameters are required only if you are deploying on the streamlit cloud.
+
+- Run the application
+
+  `streamlit run chat_with_pdf.py`
