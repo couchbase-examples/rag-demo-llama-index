@@ -23,7 +23,7 @@ def store_document(uploaded_file, storage_context, service_context):
         with open(temp_file_path, "wb") as f:
             f.write(uploaded_file.getvalue())
 
-        PDFReader = download_loader("PDFReader")
+        PDFReader = download_loader("PDFReader", custom_path=temp_dir.name)
 
         loader = PDFReader()
         documents = loader.load_data(file=temp_file_path)
