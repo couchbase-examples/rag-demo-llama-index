@@ -23,8 +23,7 @@ For RAG, we are using LlamaIndex, Couchbase Vector Search & OpenAI. We fetch par
 
   Copy the `secrets.example.toml` file in `.streamlit` folder and rename it to `secrets.toml` and replace the placeholders with the actual values for your environment
 
-  ```
-  OPENAI_API_KEY = "<open_ai_api_key>"
+  ```OPENAI_API_KEY = "<open_ai_api_key>"
   DB_CONN_STR = "<connection_string_for_couchbase_cluster>"
   DB_USERNAME = "<username_for_couchbase_cluster>"
   DB_PASSWORD = "<password_for_couchbase_cluster>"
@@ -39,6 +38,101 @@ For RAG, we are using LlamaIndex, Couchbase Vector Search & OpenAI. We fetch par
   ```
 
   The last two parameters are required only if you are deploying on the streamlit cloud.
+
+- #### Create the Search Index on Full Text Service
+
+  We need to create the Search Index on the Full Text Service in Couchbase. For this demo, you can import the following index using the instructions.
+
+  - [Couchbase Capella](https://docs.couchbase.com/cloud/search/import-search-index.html)
+
+    - Copy the index definition to a new file index.json
+    - Import the file in Capella using the instructions in the documentation.
+    - Click on Create Index to create the index.
+
+  - [Couchbase Server](https://docs.couchbase.com/server/current/search/import-search-index.html)
+
+    - Click on Search -> Add Index -> Import
+    - Copy the following Index definition in the Import screen
+    - Click on Create Index to create the index.
+
+  #### Index Definition
+
+  Here, we are creating the index `pdf_search` on the documents in the `docs` collection within the `shared` scope in the bucket `pdf-docs`. The Vector field is set to `embeddings` with 1536 dimensions and the text field set to `text`. We are also indexing and storing all the fields under `metadata` in the document as a dynamic mapping to account for varying document structures. The similarity metric is set to `dot_product`. If there is a change in these parameters, please adapt the index accordingly.
+
+  ```
+  {
+    "name": "pdf_search",
+    "type": "fulltext-index",
+    "params": {
+        "doc_config": {
+            "docid_prefix_delim": "",
+            "docid_regexp": "",
+            "mode": "scope.collection.type_field",
+            "type_field": "type"
+        },
+        "mapping": {
+            "default_analyzer": "standard",
+            "default_datetime_parser": "dateTimeOptional",
+            "default_field": "_all",
+            "default_mapping": {
+                "dynamic": true,
+                "enabled": false
+            },
+            "default_type": "_default",
+            "docvalues_dynamic": false,
+            "index_dynamic": true,
+            "store_dynamic": false,
+            "type_field": "_type",
+            "types": {
+                "shared.docs": {
+                    "dynamic": true,
+                    "enabled": true,
+                    "properties": {
+                        "embedding": {
+                            "enabled": true,
+                            "dynamic": false,
+                            "fields": [
+                                {
+                                    "dims": 1536,
+                                    "index": true,
+                                    "name": "embedding",
+                                    "similarity": "dot_product",
+                                    "type": "vector",
+                                    "vector_index_optimized_for": "recall"
+                                }
+                            ]
+                        },
+                        "text": {
+                            "enabled": true,
+                            "dynamic": false,
+                            "fields": [
+                                {
+                                    "index": true,
+                                    "name": "text",
+                                    "store": true,
+                                    "type": "text"
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "store": {
+            "indexType": "scorch",
+            "segmentVersion": 16
+        }
+    },
+    "sourceType": "gocbcore",
+    "sourceName": "pdf-docs",
+    "sourceParams": {},
+    "planParams": {
+        "maxPartitionsPerPIndex": 64,
+        "indexPartitions": 16,
+        "numReplicas": 0
+    }
+  }
+  ```
 
 - Run the application
 
