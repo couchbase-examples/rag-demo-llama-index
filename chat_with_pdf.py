@@ -3,15 +3,25 @@ import tempfile
 
 import streamlit as st
 
-from llama_index import (
-    ServiceContext,
-    StorageContext,
+from llama_index.core import (
     VectorStoreIndex,
     download_loader,
+    ServiceContext,
+    StorageContext,
 )
-from llama_index.chat_engine.simple import SimpleChatEngine
-from llama_index.llms import OpenAI
-from llama_index.vector_stores.couchbase_store import CouchbaseVectorStore
+
+from llama_index.core.chat_engine.simple import SimpleChatEngine
+from llama_index.llms.openai import OpenAI
+from llama_index.vector_stores.couchbase import CouchbaseVectorStore
+
+
+def check_environment_variable(variable_name):
+    """Check if environment variable is set"""
+    if variable_name not in os.environ:
+        st.error(
+            f"{variable_name} environment variable is not set. Please add it to the secrets.toml file"
+        )
+        st.stop()
 
 
 def store_document(uploaded_file, storage_context, service_context):
@@ -39,10 +49,27 @@ def store_document(uploaded_file, storage_context, service_context):
 
 
 @st.cache_resource(show_spinner="Connecting to Couchbase")
+def connect_to_couchbase(connection_string, db_username, db_password):
+    """Connect to couchbase"""
+    from couchbase.cluster import Cluster
+    from couchbase.auth import PasswordAuthenticator
+    from couchbase.options import ClusterOptions
+    from datetime import timedelta
+
+    auth = PasswordAuthenticator(db_username, db_password)
+    options = ClusterOptions(auth)
+    connect_string = connection_string
+    cluster = Cluster(connect_string, options)
+
+    # Wait until the cluster is ready for use.
+    cluster.wait_until_ready(timedelta(seconds=5))
+
+    return cluster
+
+
+@st.cache_resource()
 def get_vector_store(
-    db_conn_str,
-    db_username,
-    db_password,
+    _cluster,
     db_bucket,
     db_scope,
     db_collection,
@@ -50,9 +77,7 @@ def get_vector_store(
 ):
     """Return the Couchbase vector store."""
     return CouchbaseVectorStore(
-        connection_string=db_conn_str,
-        db_username=db_username,
-        db_password=db_password,
+        cluster=_cluster,
         bucket_name=db_bucket,
         scope_name=db_scope,
         collection_name=db_collection,
@@ -92,10 +117,21 @@ if __name__ == "__main__":
         DB_COLLECTION = os.getenv("DB_COLLECTION")
         INDEX_NAME = os.getenv("INDEX_NAME")
 
+        # Ensure that all environment variables are set
+        check_environment_variable("OPENAI_API_KEY")
+        check_environment_variable("DB_CONN_STR")
+        check_environment_variable("DB_USERNAME")
+        check_environment_variable("DB_PASSWORD")
+        check_environment_variable("DB_BUCKET")
+        check_environment_variable("DB_SCOPE")
+        check_environment_variable("DB_COLLECTION")
+        check_environment_variable("INDEX_NAME")
+
+        # Connect to Couchbase Vector Store
+        cluster = connect_to_couchbase(DB_CONN_STR, DB_USERNAME, DB_PASSWORD)
+
         vector_store = get_vector_store(
-            DB_CONN_STR,
-            DB_USERNAME,
-            DB_PASSWORD,
+            cluster,
             DB_BUCKET,
             DB_SCOPE,
             DB_COLLECTION,
