@@ -1,6 +1,4 @@
-llama-index-vector-stores-couchbase @ git+https://github.com/nithishr/llama_index.git@couchbase-vs#subdirectory=llama-index-integrations/vector_stores/llama-index-vector-stores-couchbase
-streamlit==1.33.0
-couchbase==4.2.0
+llama-index-vector-stores-couchbase==0.1.0
 pypdf==4.2.0
 nltk==3.8.1
 llama-index-llms-openai==0.1.15
