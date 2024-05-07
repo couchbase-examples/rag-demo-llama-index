@@ -4,4 +4,4 @@ nltk==3.8.1
 llama-index-llms-openai==0.1.15
 llama-index-embeddings-openai==0.1.9
 pydantic==1.10.13
-llama-index-readers-file==0.1.16
+llama-index-readers-file==0.1.20
