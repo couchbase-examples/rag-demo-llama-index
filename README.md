@@ -2,6 +2,8 @@
 
 This is a demo app built to chat with your custom PDFs using the vector search capabilities of Couchbase to augment the OpenAI results in a Retrieval-Augmented-Generation (RAG) model.
 
+> Note that you need Couchbase Server 7.6 or higher for Vector Search.
+
 ### How does it work?
 
 You can upload your PDFs with custom data & ask questions about the data in the chat box.
@@ -31,10 +33,11 @@ For RAG, we are using LlamaIndex, Couchbase Vector Search & OpenAI. We fetch par
   DB_SCOPE = "<name_of_scope_to_store_documents>"
   DB_COLLECTION = "<name_of_collection_to_store_documents>"
   INDEX_NAME = "<name_of_fts_index_with_vector_support>"
+  AUTH_ENABLED = "True/False" # enables authentication for the streamlit app using LOGIN_PASSWORD
   LOGIN_PASSWORD = "<password to access the streamlit app>"
   # Required for streamlit cloud as downloads are restricted to default locations
-  NLTK_DATA="/tmp/nltk-corpora"
-  TIKTOKEN_CACHE_DIR="/tmp/tiktoken-cache"
+  NLTK_DATA = "/tmp/nltk-corpora"
+  TIKTOKEN_CACHE_DIR = "/tmp/tiktoken-cache"
   ```
 
   The last two parameters are required only if you are deploying on the streamlit cloud.
