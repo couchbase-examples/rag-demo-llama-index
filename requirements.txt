@@ -1,6 +1,6 @@
 llama-index==0.11.14
 llama-index-vector-stores-couchbase==0.2.1
-llama-index-llms-openai==0.2.9
+llama-index-llms-openai==0.2.16
 llama-index-embeddings-openai==0.2.5
 llama-index-readers-file==0.2.2
 streamlit==1.39.0
