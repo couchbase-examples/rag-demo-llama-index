@@ -1,4 +1,4 @@
-llama-index==0.11.14
+llama-index==0.11.21
 llama-index-vector-stores-couchbase==0.2.1
 llama-index-llms-openai==0.2.16
 llama-index-embeddings-openai==0.2.5
