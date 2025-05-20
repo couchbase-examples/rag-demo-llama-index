@@ -12,7 +12,7 @@ from llama_index.core import (
 
 from llama_index.core.chat_engine.simple import SimpleChatEngine
 from llama_index.llms.openai import OpenAI
-from llama_index.vector_stores.couchbase import CouchbaseVectorStore
+from llama_index.vector_stores.couchbase import CouchbaseSearchVectorStore
 from llama_index.embeddings.openai import OpenAIEmbedding
 
 
@@ -79,7 +79,7 @@ def get_vector_store(
     index_name,
 ):
     """Return the Couchbase vector store."""
-    return CouchbaseVectorStore(
+    return CouchbaseSearchVectorStore(
         cluster=_cluster,
         bucket_name=db_bucket,
         scope_name=db_scope,
@@ -175,8 +175,8 @@ if __name__ == "__main__":
         )
 
         # Use OpenAI as the llm & for embeddings
-        llm = OpenAI(temperature=0, model="gpt-4-1106-preview")
-        embeddings = OpenAIEmbedding()
+        llm = OpenAI(temperature=0, model="gpt-4o-mini")
+        embeddings = OpenAIEmbedding(model='text-embedding-3-small')
 
         # Set the global settings for loading documents
         Settings.embed_model = embeddings
@@ -185,7 +185,7 @@ if __name__ == "__main__":
         storage_context = StorageContext.from_defaults(vector_store=vector_store)
 
         # Pure LLM for comparison of results
-        pure_llm = OpenAI(model="gpt-4-1106-preview")
+        pure_llm = OpenAI(model="gpt-4o-mini")
         st.session_state.chat_llm = SimpleChatEngine.from_defaults(
             llm=pure_llm,
             system_prompt=template_without_rag,

@@ -140,3 +140,5 @@ For RAG, we are using LlamaIndex, Couchbase Vector Search & OpenAI. We fetch par
 - Run the application
 
   `streamlit run chat_with_pdf.py`
+
+> **Note:** Upload a PDF document before asking questions.
