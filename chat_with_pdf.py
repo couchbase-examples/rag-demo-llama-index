@@ -175,7 +175,7 @@ if __name__ == "__main__":
         )
 
         # Use OpenAI as the llm & for embeddings
-        llm = OpenAI(temperature=0, model="gpt-4-1106-preview")
+        llm = OpenAI(temperature=0, model="gpt-4o-mini")
         embeddings = OpenAIEmbedding()
 
         # Set the global settings for loading documents
@@ -185,7 +185,7 @@ if __name__ == "__main__":
         storage_context = StorageContext.from_defaults(vector_store=vector_store)
 
         # Pure LLM for comparison of results
-        pure_llm = OpenAI(model="gpt-4-1106-preview")
+        pure_llm = OpenAI(model="gpt-4o-mini")
         st.session_state.chat_llm = SimpleChatEngine.from_defaults(
             llm=pure_llm,
             system_prompt=template_without_rag,
