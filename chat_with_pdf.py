@@ -12,7 +12,7 @@ from llama_index.core import (
 
 from llama_index.core.chat_engine.simple import SimpleChatEngine
 from llama_index.llms.openai import OpenAI
-from llama_index.vector_stores.couchbase import CouchbaseVectorStore
+from llama_index.vector_stores.couchbase import CouchbaseSearchVectorStore
 from llama_index.embeddings.openai import OpenAIEmbedding
 
 
@@ -79,7 +79,7 @@ def get_vector_store(
     index_name,
 ):
     """Return the Couchbase vector store."""
-    return CouchbaseVectorStore(
+    return CouchbaseSearchVectorStore(
         cluster=_cluster,
         bucket_name=db_bucket,
         scope_name=db_scope,
