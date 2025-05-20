@@ -176,7 +176,7 @@ if __name__ == "__main__":
 
         # Use OpenAI as the llm & for embeddings
         llm = OpenAI(temperature=0, model="gpt-4o-mini")
-        embeddings = OpenAIEmbedding()
+        embeddings = OpenAIEmbedding(model='text-embedding-3-small')
 
         # Set the global settings for loading documents
         Settings.embed_model = embeddings
