@@ -96,7 +96,7 @@ def setup_sidebar_content():
     # View Code
     if st.checkbox("View Code"):
         st.write(
-            "View the code here: [Github](https://github.com/couchbase-examples/rag-demo-llama-index/blob/main/chat_with_pdf.py)"
+            "View the code here: [Github](https://github.com/couchbase-examples/rag-demo-llama-index/)"
         )
 
 
