@@ -127,7 +127,7 @@ For RAG, we are using LlamaIndex, Couchbase Vector Search & OpenAI. We fetch par
         }
     },
     "sourceType": "gocbcore",
-    "sourceName": "pdf-docs",
+    "sourceName": "pdf_docs",
     "sourceParams": {},
     "planParams": {
         "maxPartitionsPerPIndex": 64,
