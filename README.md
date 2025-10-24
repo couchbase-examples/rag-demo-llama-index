@@ -60,7 +60,7 @@ For RAG, we are using LlamaIndex, Couchbase Vector Search & OpenAI. We fetch par
 
   #### Index Definition
 
-  Here, we are creating the index `pdf_search` on the documents in the `docs` collection within the `shared` scope in the bucket `pdf-docs`. The Vector field is set to `embeddings` with 1536 dimensions and the text field set to `text`. We are also indexing and storing all the fields under `metadata` in the document as a dynamic mapping to account for varying document structures. The similarity metric is set to `dot_product`. If there is a change in these parameters, please adapt the index accordingly.
+  Here, we are creating the index `pdf_search` on the documents in the `docs` collection within the `shared` scope in the bucket `pdf_docs`. The Vector field is set to `embeddings` with 1536 dimensions and the text field set to `text`. We are also indexing and storing all the fields under `metadata` in the document as a dynamic mapping to account for varying document structures. The similarity metric is set to `dot_product`. If there is a change in these parameters, please adapt the index accordingly.
 
   ```
   {
@@ -139,6 +139,8 @@ For RAG, we are using LlamaIndex, Couchbase Vector Search & OpenAI. We fetch par
 
 - Run the application
 
-  `streamlit run chat_with_pdf.py`
+  `streamlit run GSI/chat_with_pdf_query.py`
+  OR
+  `streamlit run FTS/chat_with_pdf_search.py`
 
 > **Note:** Upload a PDF document before asking questions.
