@@ -1,49 +1,84 @@
-"""
-Chat with PDF using LlamaIndex, Couchbase SearchVectorStore & OpenAI
-This version uses CouchbaseSearchVectorStore for vector operations.
-
-Relocated to FTS/ directory. Ensures parent directory is in sys.path so that
-`shared` package imports continue to function when running this script directly.
-"""
 import os
-import sys
-
-# Ensure parent directory is on sys.path for `shared` imports when executed from here
-CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-PARENT_DIR = os.path.dirname(CURRENT_DIR)
-if PARENT_DIR not in sys.path:
-    sys.path.insert(0, PARENT_DIR)
+import tempfile
 
 import streamlit as st
-from llama_index.core import StorageContext
-from llama_index.vector_stores.couchbase import CouchbaseSearchVectorStore
 
-from shared.config import (
-    setup_authentication,
-    get_environment_variables,
-    validate_environment_variables,
-    get_prompts,
+from llama_index.core import (
+    VectorStoreIndex,
+    SimpleDirectoryReader,
+    StorageContext,
+    Settings,
 )
-from shared.common import (
-    store_document,
-    connect_to_couchbase,
-    setup_llm_and_embeddings,
-    create_pure_llm_chat_engine,
-    setup_sidebar_content,
-    initialize_session_state,
-    handle_chat_interaction,
-)
+
+from llama_index.core.chat_engine.simple import SimpleChatEngine
+from llama_index.llms.openai import OpenAI
+from llama_index.vector_stores.couchbase import CouchbaseSearchVectorStore
+from llama_index.embeddings.openai import OpenAIEmbedding
+
+
+def parse_bool(value: str):
+    """Parse boolean values from environment variables"""
+    return value.lower() in ("yes", "true", "t", "1")
+
+
+def check_environment_variable(variable_name):
+    """Check if environment variable is set"""
+    if variable_name not in os.environ:
+        st.error(
+            f"{variable_name} environment variable is not set. Please add it to the secrets.toml file"
+        )
+        st.stop()
+
+
+def store_document(uploaded_file, storage_context):
+    """Chunk the PDF & store it in Couchbase Vector Store."""
+    if uploaded_file is not None:
+        temp_dir = tempfile.TemporaryDirectory()
+        temp_file_path = os.path.join(temp_dir.name, uploaded_file.name)
+
+        with open(temp_file_path, "wb") as f:
+            f.write(uploaded_file.getvalue())
+
+        loader = SimpleDirectoryReader(input_files=[temp_file_path])
+        documents = loader.load_data()
+
+        index = VectorStoreIndex.from_documents(
+            documents,
+            storage_context=storage_context,
+        )
+        st.info(f"PDF loaded into vector store in {len(documents)} documents")
+        return index
+    return None
+
+
+@st.cache_resource(show_spinner="Connecting to Couchbase")
+def connect_to_couchbase(connection_string, db_username, db_password):
+    """Connect to couchbase"""
+    from couchbase.cluster import Cluster
+    from couchbase.auth import PasswordAuthenticator
+    from couchbase.options import ClusterOptions
+    from datetime import timedelta
+
+    auth = PasswordAuthenticator(db_username, db_password)
+    options = ClusterOptions(auth)
+    connect_string = connection_string
+    cluster = Cluster(connect_string, options)
+
+    # Wait until the cluster is ready for use.
+    cluster.wait_until_ready(timedelta(seconds=5))
+
+    return cluster
 
 
 @st.cache_resource()
-def get_search_vector_store(
+def get_vector_store(
     _cluster,
     db_bucket,
     db_scope,
     db_collection,
     index_name,
 ):
-    """Return the Couchbase SearchVectorStore."""
+    """Return the Couchbase vector store."""
     return CouchbaseSearchVectorStore(
         cluster=_cluster,
         bucket_name=db_bucket,
@@ -53,71 +88,123 @@ def get_search_vector_store(
     )
 
 
-def main():
-    """Main application function"""
+if __name__ == "__main__":
+    # Authorization
+    if "auth" not in st.session_state:
+        st.session_state.auth = False
+
     st.set_page_config(
-        page_title="Chat with your PDF using LlamaIndex, Couchbase SearchVectorStore & OpenAI",
-        page_icon="🔍",
+        page_title="Chat with your PDF using LlamaIndex, Couchbase & OpenAI",
+        page_icon="🤖",
         layout="centered",
         initial_sidebar_state="auto",
         menu_items=None,
     )
 
-    # Authentication
-    if not setup_authentication():
-        return
+    AUTH_ENABLED = parse_bool(os.getenv("AUTH_ENABLED", "False"))
 
-    # Load and validate environment variables
-    validate_environment_variables()
-    env_vars = get_environment_variables()
+    if not AUTH_ENABLED:
+        st.session_state.auth = True
+    else:
+        # Authorization
+        if "auth" not in st.session_state:
+            st.session_state.auth = False
 
-    # Connect to Couchbase Vector Store
-    cluster = connect_to_couchbase(
-        env_vars['DB_CONN_STR'],
-        env_vars['DB_USERNAME'],
-        env_vars['DB_PASSWORD']
-    )
+        AUTH = os.getenv("LOGIN_PASSWORD")
+        check_environment_variable("LOGIN_PASSWORD")
 
-    vector_store = get_search_vector_store(
-        cluster,
-        env_vars['DB_BUCKET'],
-        env_vars['DB_SCOPE'],
-        env_vars['DB_COLLECTION'],
-        env_vars['INDEX_NAME'],
-    )
+        # Authentication
+        user_pwd = st.text_input("Enter password", type="password")
+        pwd_submit = st.button("Submit")
 
-    # Get prompt templates
-    template_rag, template_without_rag = get_prompts()
+        if pwd_submit and user_pwd == AUTH:
+            st.session_state.auth = True
+        elif pwd_submit and user_pwd != AUTH:
+            st.error("Incorrect password")
 
-    # Frontend
-    couchbase_logo = "https://emoji.slack-edge.com/T024FJS4M/couchbase/4a361e948b15ed91.png"
+    if st.session_state.auth:
+        # Load environment variables
+        DB_CONN_STR = os.getenv("DB_CONN_STR")
+        DB_USERNAME = os.getenv("DB_USERNAME")
+        DB_PASSWORD = os.getenv("DB_PASSWORD")
+        DB_BUCKET = os.getenv("DB_BUCKET")
+        DB_SCOPE = os.getenv("DB_SCOPE")
+        DB_COLLECTION = os.getenv("DB_COLLECTION")
+        INDEX_NAME = os.getenv("INDEX_NAME")
 
-    st.title("Chat with PDF (SearchVectorStore)")
-    st.markdown(
-        "🔍 **SearchVectorStore Version** - Answers with [Couchbase logo](https://emoji.slack-edge.com/T024FJS4M/couchbase/4a361e948b15ed91.png) are generated using *RAG* while 🤖️ are generated by pure *LLM (ChatGPT)*"
-    )
+        # Ensure that all environment variables are set
+        check_environment_variable("OPENAI_API_KEY")
+        check_environment_variable("DB_CONN_STR")
+        check_environment_variable("DB_USERNAME")
+        check_environment_variable("DB_PASSWORD")
+        check_environment_variable("DB_BUCKET")
+        check_environment_variable("DB_SCOPE")
+        check_environment_variable("DB_COLLECTION")
+        check_environment_variable("INDEX_NAME")
 
-    # Setup LLM and embeddings
-    llm, embeddings = setup_llm_and_embeddings()
-    storage_context = StorageContext.from_defaults(vector_store=vector_store)
+        # Connect to Couchbase Vector Store
+        cluster = connect_to_couchbase(DB_CONN_STR, DB_USERNAME, DB_PASSWORD)
 
-    # Pure LLM for comparison of results
-    st.session_state.chat_llm = create_pure_llm_chat_engine(template_without_rag)
+        vector_store = get_vector_store(
+            cluster,
+            DB_BUCKET,
+            DB_SCOPE,
+            DB_COLLECTION,
+            INDEX_NAME,
+        )
 
-    with st.sidebar:
-        st.header("Upload your PDF")
-        with st.form("upload pdf"):
-            uploaded_file = st.file_uploader(
-                "Choose a PDF.",
-                help="The document will be deleted after one hour of inactivity (TTL).",
-                type="pdf",
-            )
-            submitted = st.form_submit_button("Upload")
-            if submitted:
-                index = store_document(uploaded_file, storage_context)
-                if not index:
-                    st.warning("Please upload a valid PDF")
-                else:
+        # Build the prompt for the RAG
+        template_rag = """You are a helpful bot. If you cannot answer based on the context provided, respond with a generic answer. Answer the question as truthfully as possible using the context below:
+        {context}
+
+        Question: {question}"""
+
+        # Pure OpenAI prompt without RAG
+        template_without_rag = """You are a helpful bot. Answer the question as truthfully as possible.
+
+        Question: {question}"""
+
+        # Frontend
+        couchbase_logo = (
+            "https://emoji.slack-edge.com/T024FJS4M/couchbase/4a361e948b15ed91.png"
+        )
+
+        st.title("Chat with PDF")
+        st.markdown(
+            "Answers with [Couchbase logo](https://emoji.slack-edge.com/T024FJS4M/couchbase/4a361e948b15ed91.png) are generated using *RAG* while 🤖️ are generated by pure *LLM (ChatGPT)*"
+        )
+
+        # Use OpenAI as the llm & for embeddings
+        llm = OpenAI(temperature=0, model="gpt-4o-mini")
+        embeddings = OpenAIEmbedding(model='text-embedding-3-small')
+
+        # Set the global settings for loading documents
+        Settings.embed_model = embeddings
+        Settings.chunk_size = 1500
+        Settings.chunk_overlap = 150
+        storage_context = StorageContext.from_defaults(vector_store=vector_store)
+
+        # Pure LLM for comparison of results
+        pure_llm = OpenAI(model="gpt-4o-mini")
+        st.session_state.chat_llm = SimpleChatEngine.from_defaults(
+            llm=pure_llm,
+            system_prompt=template_without_rag,
+        )
+
+        with st.sidebar:
+            st.header("Upload your PDF")
+            with st.form("upload pdf"):
+                uploaded_file = st.file_uploader(
+                    "Choose a PDF.",
+                    help="The document will be deleted after one hour of inactivity (TTL).",
+                    type="pdf",
+                )
+                submitted = st.form_submit_button("Upload")
+                if submitted:
+                    index = store_document(uploaded_file, storage_context)
+                    if not index:
+                        st.warning("Please upload a valid PDF")
+
                     # Create the chat engine with context from the uploaded data
                     st.session_state.chat_engine_rag = index.as_chat_engine(
                         chat_mode="context",
@@ -125,14 +212,90 @@ def main():
                         system_prompt=template_rag,
                     )
 
-        setup_sidebar_content()
+            st.subheader("How does it work?")
+            st.markdown(
+                """
+                For each question, you will get two answers:
+                * one using RAG ([Couchbase logo](https://emoji.slack-edge.com/T024FJS4M/couchbase/4a361e948b15ed91.png))
+                * one using pure LLM - OpenAI (🤖️).
+                """
+            )
 
-    # Initialize session state
-    initialize_session_state()
+            st.markdown(
+                "For RAG, we are using [LlamaIndex](https://www.llamaindex.ai/), [Couchbase Vector Search](https://couchbase.com/) & [OpenAI](https://openai.com/). We fetch parts of the PDF relevant to the question using Vector search & add it as the context to the LLM. The LLM is instructed to answer based on the context from the Vector Store."
+            )
 
-    # Handle chat interaction
-    handle_chat_interaction(couchbase_logo)
+            # View Code
+            if st.checkbox("View Code"):
+                st.write(
+                    "View the code here: [Github](https://github.com/couchbase-examples/rag-demo-llama-index/blob/main/chat_with_pdf.py)"
+                )
 
+        if "messages" not in st.session_state:
+            st.session_state.messages = []
+            st.session_state.messages.append(
+                {
+                    "role": "assistant",
+                    "content": "Hi, I'm a chatbot who can chat with the PDF. How can I help you?",
+                    "avatar": "🤖️",
+                }
+            )
+            st.session_state.chat_llm = None
+            st.session_state.chat_engine_rag = None
 
-if __name__ == "__main__":
-    main()
+        # Display chat messages from history on app rerun
+        for message in st.session_state.messages:
+            with st.chat_message(message["role"], avatar=message["avatar"]):
+                st.markdown(message["content"])
+
+        # React to user input
+        if question := st.chat_input("Ask a question based on the PDF"):
+            # Display user message in chat message container
+            st.chat_message("user").markdown(question)
+
+            # Add user message to chat history
+            st.session_state.messages.append(
+                {"role": "user", "content": question, "avatar": "👤"}
+            )
+
+            # Add placeholder for streaming the response
+            with st.chat_message("assistant", avatar=couchbase_logo):
+                message_placeholder = st.empty()
+
+            # stream the response from the RAG
+            rag_response = ""
+            rag_stream_response = st.session_state.chat_engine_rag.stream_chat(question)
+            for chunk in rag_stream_response.response_gen:
+                rag_response += chunk
+                message_placeholder.markdown(rag_response + "▌")
+
+            message_placeholder.markdown(rag_response)
+            st.session_state.messages.append(
+                {
+                    "role": "assistant",
+                    "content": rag_response,
+                    "avatar": couchbase_logo,
+                }
+            )
+
+            # stream the response from the pure LLM
+
+            # Add placeholder for streaming the response
+            with st.chat_message("ai", avatar="🤖️"):
+                message_placeholder_pure_llm = st.empty()
+
+            pure_llm_response = ""
+            pure_llm_stream_response = st.session_state.chat_llm.stream_chat(question)
+
+            for chunk in pure_llm_stream_response.response_gen:
+                pure_llm_response += chunk
+                message_placeholder_pure_llm.markdown(pure_llm_response + "▌")
+
+            message_placeholder_pure_llm.markdown(pure_llm_response)
+            st.session_state.messages.append(
+                {
+                    "role": "assistant",
+                    "content": pure_llm_response,
+                    "avatar": "🤖️",
+                }
+            )
