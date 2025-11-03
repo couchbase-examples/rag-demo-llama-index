@@ -200,7 +200,7 @@ def initialize_session_state():
         st.session_state.messages.append(
             {
                 "role": "assistant",
-                "content": "Hi, I'm a chatbot who can chat with the PDF. How can I help you?",
+                "content": "Hi! I'm a chatbot that can search your database and answer questions. You can chat with me anytime, and upload a PDF for enhanced search capabilities. How can I help you?",
                 "avatar": "🤖️",
             }
         )
@@ -216,7 +216,7 @@ def handle_chat_interaction(couchbase_logo):
             st.markdown(message["content"])
 
     # React to user input
-    if question := st.chat_input("Ask a question based on the PDF"):
+    if question := st.chat_input("Ask a question"):
         # Display user message in chat message container
         st.chat_message("user").markdown(question)
 
@@ -225,29 +225,33 @@ def handle_chat_interaction(couchbase_logo):
             {"role": "user", "content": question, "avatar": "👤"}
         )
 
-        # Add placeholder for streaming the response
-        with st.chat_message("assistant", avatar=couchbase_logo):
-            message_placeholder = st.empty()
+        # Try RAG response first (if available)
+        if st.session_state.chat_engine_rag is not None:
+            try:
+                # Add placeholder for streaming the response
+                with st.chat_message("assistant", avatar=couchbase_logo):
+                    message_placeholder = st.empty()
 
-        # stream the response from the RAG
-        rag_response = ""
-        rag_stream_response = st.session_state.chat_engine_rag.stream_chat(question)
-        for chunk in rag_stream_response.response_gen:
-            rag_response += chunk
-            message_placeholder.markdown(rag_response + "▌")
+                # stream the response from the RAG
+                rag_response = ""
+                rag_stream_response = st.session_state.chat_engine_rag.stream_chat(question)
+                for chunk in rag_stream_response.response_gen:
+                    rag_response += chunk
+                    message_placeholder.markdown(rag_response + "▌")
 
-        message_placeholder.markdown(rag_response)
-        st.session_state.messages.append(
-            {
-                "role": "assistant",
-                "content": rag_response,
-                "avatar": couchbase_logo,
-            }
-        )
+                message_placeholder.markdown(rag_response)
+                st.session_state.messages.append(
+                    {
+                        "role": "assistant",
+                        "content": rag_response,
+                        "avatar": couchbase_logo,
+                    }
+                )
+            except Exception as e:
+                # If RAG fails, show error and continue with pure LLM
+                st.warning("⚠️ RAG search failed, showing pure LLM response only.")
 
-        # stream the response from the pure LLM
-
-        # Add placeholder for streaming the response
+        # Always show pure LLM response for comparison
         with st.chat_message("ai", avatar="🤖️"):
             message_placeholder_pure_llm = st.empty()
 
@@ -268,6 +272,116 @@ def handle_chat_interaction(couchbase_logo):
         )
 
 
+def create_vector_index(
+    cluster,
+    bucket_name: str,
+    scope_name: str,
+    collection_name: str,
+    index_name: str = "idx_vector_embedding",
+    embedding_key: str = "vector",
+    dimension: int = 1536,
+    similarity: str = "cosine",
+    recreate: bool = False
+):
+    """Create a GSI vector index for better performance."""
+    from couchbase.options import QueryOptions
+    
+    # Get the scope object for query execution
+    bucket = cluster.bucket(bucket_name)
+    scope = bucket.scope(scope_name)
+    
+    # Check if index already exists first
+    try:
+        # Prepare the check query
+        check_query_string = "SELECT name FROM system:indexes WHERE name = $index_name"
+        prepared_check = scope.query(check_query_string, prepared=True)
+        
+        # Execute with parameters
+        result = prepared_check.execute(parameters={"index_name": index_name})
+        existing = list(result.rows())
+        
+        if existing:
+            if recreate:
+                # Drop existing index first (DDL statements can't be fully parameterized)
+                try:
+                    drop_query_string = f"DROP INDEX `{collection_name}`.`{index_name}`"
+                    prepared_drop = scope.query(drop_query_string, prepared=True)
+                    prepared_drop.execute()
+                    st.info(f"🗑️ Existing index '{index_name}' dropped")
+                except Exception as drop_e:
+                    st.warning(f"Could not drop existing index: {drop_e}")
+            else:
+                st.info(f"✅ Index '{index_name}' already exists")
+                return True
+    except Exception:
+        pass  # Continue to create
+    
+    # Create the index (DDL statements have limited parameterization support)
+    try:
+        create_query_string = f"CREATE INDEX `{index_name}` ON `{collection_name}` ({embedding_key} VECTOR) USING GSI WITH {{\"dimension\": {dimension}, \"description\": \"IVF,SQ8\", \"similarity\": \"{similarity}\"}}"
+        prepared_create = scope.query(create_query_string, prepared=True)
+        prepared_create.execute()
+        
+        st.success(f"✅ Vector index '{index_name}' created successfully!")
+        return True
+        
+    except Exception as e:
+        error_msg = str(e)
+        if "already exists" in error_msg.lower():
+            st.info(f"✅ Index '{index_name}' already exists")
+            return True
+        else:
+            st.error(f"❌ Failed to create index: {error_msg}")
+            return False
+
+
+def check_vector_index_exists(
+    cluster,
+    bucket_name: str,
+    scope_name: str,
+    collection_name: str,
+    index_name: str = "idx_vector_embedding"
+) -> bool:
+    """Check if a vector index exists and is online."""
+    try:
+        from couchbase.options import QueryOptions
+        
+        # Use cluster-level query for better compatibility
+        # More comprehensive query to find the index
+        check_query = f"""
+        SELECT name, state, keyspace_id, scope_id, bucket_id, index_key
+        FROM system:indexes 
+        WHERE name = '{index_name}'
+        AND bucket_id = '{bucket_name}'
+        """
+        
+        result = cluster.query(check_query, QueryOptions(timeout=timedelta(seconds=10)))
+        rows = list(result.rows())
+        
+        if rows:
+            index_info = rows[0]
+            index_state = index_info.get('state', 'unknown')
+            
+            if index_state == 'online':
+                st.success(f"✅ Vector index '{index_name}' is **online** and ready!")
+                return True
+            elif index_state in ['building', 'pending', 'deferred']:
+                st.info(f"🔄 Vector index '{index_name}' is **{index_state}**")
+                return False
+            elif index_state == 'created':
+                st.info(f"📋 Vector index '{index_name}' is **created** but not yet building")
+                return False
+            else:
+                st.warning(f"⚠️ Vector index '{index_name}' state: **{index_state}**")
+                return False
+        else:
+            return False
+        
+    except Exception as e:
+        st.error(f"❌ Error checking vector index: {e}")
+        return False
+
+
 def get_query_vector_store(
     _cluster,
     db_bucket,
@@ -280,8 +394,8 @@ def get_query_vector_store(
         bucket_name=db_bucket,
         scope_name=db_scope,
         collection_name=db_collection,
-        search_type="KNN",
-        similarity="euclidean",
+        search_type="ANN",
+        similarity="cosine",
         text_key="content",
         embedding_key="vector",
         metadata_key="meta",
@@ -294,10 +408,7 @@ def ensure_scope_and_collection(
     scope_name: str,
     collection_name: str,
 ) -> None:
-    """Create scope and collection if they do not already exist.
-
-    Uses management API; safe to call repeatedly thanks to exception handling.
-    """
+    """Create scope and collection if they do not already exist."""
     bucket = cluster.bucket(bucket_name)
     cm = bucket.collections()
 
@@ -307,7 +418,6 @@ def ensure_scope_and_collection(
     except ScopeAlreadyExistsException:
         pass
     except Exception as e:
-        # If missing permissions ignore silently in demo context
         st.warning(f"Could not create scope '{scope_name}': {e}")
 
     # Ensure collection exists
@@ -344,7 +454,7 @@ def main():
         env_vars['DB_PASSWORD']
     )
 
-    # Ensure scope and collection are present before index creation
+    # Ensure scope and collection are present
     ensure_scope_and_collection(
         cluster,
         env_vars['DB_BUCKET'],
@@ -359,15 +469,26 @@ def main():
         env_vars['DB_COLLECTION'],
     )
 
+    # Check vector index status
+    index_exists = check_vector_index_exists(
+        cluster,
+        env_vars['DB_BUCKET'],
+        env_vars['DB_SCOPE'], 
+        env_vars['DB_COLLECTION']
+    )
+    
+    if index_exists:
+        st.success("✅ Vector index is ready for optimized search!")
+
     # Get prompt templates
     template_rag, template_without_rag = get_prompts()
 
     # Frontend
     couchbase_logo = "https://emoji.slack-edge.com/T024FJS4M/couchbase/4a361e948b15ed91.png"
 
-    st.title("Chat with PDF (QueryVectorStore)")
+    st.title("Chat with Database & PDF (QueryVectorStore)")
     st.markdown(
-        "🔎 **QueryVectorStore Version** - Answers with [Couchbase logo](https://emoji.slack-edge.com/T024FJS4M/couchbase/4a361e948b15ed91.png) are generated using *RAG* while 🤖️ are generated by pure *LLM (ChatGPT)*"
+        "🔎 **QueryVectorStore Version** - Chat anytime! Answers with [Couchbase logo](https://emoji.slack-edge.com/T024FJS4M/couchbase/4a361e948b15ed91.png) use *RAG* (when data is available) while 🤖️ are pure *LLM (ChatGPT)* responses"
     )
 
     # Setup LLM and embeddings
@@ -376,6 +497,41 @@ def main():
 
     # Pure LLM for comparison of results
     st.session_state.chat_llm = create_pure_llm_chat_engine(template_without_rag)
+    
+    # Initialize RAG chat engine with existing data if available
+    if "chat_engine_rag" not in st.session_state or st.session_state.chat_engine_rag is None:
+        if index_exists:
+            try:
+                # Try to create index from existing vector store data
+                existing_index = VectorStoreIndex.from_vector_store(
+                    vector_store=vector_store,
+                    storage_context=storage_context
+                )
+                st.session_state.chat_engine_rag = existing_index.as_chat_engine(
+                    chat_mode="context",
+                    llm=llm,
+                    system_prompt=template_rag,
+                )
+                st.success("✅ Connected to existing data in vector store!")
+            except Exception:
+                # No existing data, create empty index for future use
+                st.info("ℹ️ No existing data found. You can still chat using pure LLM or upload a PDF for RAG!")
+                # Create a placeholder index that will work with empty vector store
+                try:
+                    st.session_state.chat_engine_rag = VectorStoreIndex.from_vector_store(
+                        vector_store=vector_store,
+                        storage_context=storage_context
+                    ).as_chat_engine(
+                        chat_mode="context",
+                        llm=llm,
+                        system_prompt=template_rag,
+                    )
+                except Exception:
+                    st.session_state.chat_engine_rag = None
+        else:
+            st.info("ℹ️ No vector index found. You can still chat using pure LLM or upload a PDF to enable RAG!")
+            # Still allow chatting, but RAG won't work without index
+            st.session_state.chat_engine_rag = None
 
     with st.sidebar:
         st.header("Upload your PDF")
@@ -397,13 +553,32 @@ def main():
                         llm=llm,
                         system_prompt=template_rag,
                     )
+                    
+                    # Create vector index after new PDF upload
+                    st.info("🔧 Creating vector index for new PDF data...")
+                    with st.spinner("Updating vector index..."):
+                        success = create_vector_index(
+                            cluster,
+                            env_vars['DB_BUCKET'],
+                            env_vars['DB_SCOPE'],
+                            env_vars['DB_COLLECTION'],
+                            index_name="idx_vector_embedding",
+                            embedding_key="vector",
+                            dimension=1536,
+                            similarity="cosine",
+                            recreate=True  # Force recreation for new PDF
+                        )
+                        if success:
+                            st.success("✅ Vector index updated successfully!")
+                        else:
+                            st.warning("⚠️ Vector index update failed, but search will still work")
 
         setup_sidebar_content()
 
     # Initialize session state
     initialize_session_state()
 
-    # Handle chat interaction
+    # Always allow chat interaction
     handle_chat_interaction(couchbase_logo)
 
 
