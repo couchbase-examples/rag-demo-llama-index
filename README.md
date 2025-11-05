@@ -290,4 +290,4 @@ streamlit run GSI/chat_with_pdf_query.py
 
 ---
 
-> **Note:** Upload a PDF document before asking questions.
+> **Note:** Upload a PDF document or ensure document exists before asking questions.
