@@ -75,23 +75,35 @@ The last two parameters are required only if you are deploying on the streamlit 
 
 - Couchbase Server 7.6+ or Couchbase Capella
 
-### Create the Search Index on Full Text Service
+### FTS Index Creation
 
-We need to create the Search Index on the Full Text Service in Couchbase. For this demo, you can import the following index using the instructions.
+The application **automatically creates the FTS index** when it starts up using the `create_fts_index()` function. The index is created with the following configuration:
+
+- **Index Name**: Specified by the `INDEX_NAME` environment variable
+- **Vector field**: `embedding` with 1536 dimensions
+- **Text field**: `text` (indexed and stored)
+- **Similarity metric**: `dot_product`
+- **Vector optimization**: Optimized for recall
+
+The index definition uses dynamic type mapping based on your scope and collection names (e.g., `{scope_name}.{collection_name}`).
+
+#### Manual Index Creation (Optional)
+
+If you prefer to create the index manually through the Couchbase UI, you can do so:
 
 - [Couchbase Capella](https://docs.couchbase.com/cloud/search/import-search-index.html)
 
-  - Copy the index definition to a new file index.json
-  - Import the file in Capella using the instructions in the documentation.
-  - Click on Create Index to create the index.
+  - Copy the index definition below to a new file `index.json`
+  - Import the file in Capella using the instructions in the documentation
+  - Click on Create Index to create the index
 
 - [Couchbase Server](https://docs.couchbase.com/server/current/search/import-search-index.html)
 
   - Click on Search -> Add Index -> Import
   - Copy the following Index definition in the Import screen
-  - Click on Create Index to create the index.
+  - Click on Create Index to create the index
 
-#### Index Definition
+#### Index Definition (for manual creation)
 
 Here, we are creating the index `pdf_search` on the documents in the `docs` collection within the `shared` scope in the bucket `pdf_docs`. The Vector field is set to `embedding` with 1536 dimensions and the text field set to `text`. We are also indexing and storing all the fields under `metadata` in the document as a dynamic mapping to account for varying document structures. The similarity metric is set to `dot_product`. If there is a change in these parameters, please adapt the index accordingly.
 
@@ -219,20 +231,30 @@ While the application works without creating indexes manually, you can optionall
 
 > **Important:** The vector index should be created after ingesting the documents (uploading PDFs).
 
-**Using LlamaIndex:**
+**Creating Vector Index via SQL++:**
 
-You can create the index programmatically after uploading your PDFs:
+After uploading your PDFs, you can create a vector index using a SQL++ query executed through the application. The application includes a `create_vector_index()` function that creates the index with the following configuration:
 
 ```python
-# Create a vector index on the collection
-vector_store.create_index(
-    index_name="idx_vector",
-    dimension=1536,
-    similarity="cosine",
-    index_type=IndexType.BHIVE,  # or IndexType.COMPOSITE
-    index_description="IVF,SQ8"
-)
+# Example of how the vector index is created in the code
+create_query_string = f"""
+CREATE INDEX `idx_vector_embedding` 
+ON `{collection_name}` (vector VECTOR) 
+USING GSI 
+WITH {{
+  "dimension": 1536,
+  "description": "IVF,SQ8",
+  "similarity": "cosine"
+}}
+"""
 ```
+
+The function:
+- Checks if the index already exists before creating
+- Creates a GSI vector index on the `vector` field
+- Configures the index with 1536 dimensions (matching OpenAI embeddings)
+- Uses cosine similarity for distance calculations
+- Applies IVF,SQ8 quantization for optimized performance
 
 **Understanding Index Configuration Parameters:**
 

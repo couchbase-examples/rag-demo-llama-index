@@ -15,6 +15,7 @@ from llama_index.llms.openai import OpenAI
 from llama_index.vector_stores.couchbase import CouchbaseSearchVectorStore
 from llama_index.embeddings.openai import OpenAIEmbedding
 from couchbase.management.collections import CollectionSpec
+from couchbase.management.search import SearchIndex
 from couchbase.exceptions import (
     ScopeAlreadyExistsException,
     CollectionAlreadyExistsException,
@@ -101,6 +102,104 @@ def ensure_scope_and_collection(
         st.warning(f"Could not create collection '{collection_name}': {e}")
 
 
+def create_fts_index(
+    cluster,
+    bucket_name: str,
+    scope_name: str,
+    collection_name: str,
+    index_name: str,
+) -> None:
+    """Create Full-Text Search index for vector search."""
+    scope_index_manager = (
+        cluster.bucket(bucket_name).scope(scope_name).search_indexes()
+    )
+    
+    index_definition = {
+        "name": index_name,
+        "type": "fulltext-index",
+        "params": {
+            "doc_config": {
+                "docid_prefix_delim": "",
+                "docid_regexp": "",
+                "mode": "scope.collection.type_field",
+                "type_field": "type"
+            },
+            "mapping": {
+                "default_analyzer": "standard",
+                "default_datetime_parser": "dateTimeOptional",
+                "default_field": "_all",
+                "default_mapping": {
+                    "dynamic": True,
+                    "enabled": False
+                },
+                "default_type": "_default",
+                "docvalues_dynamic": False,
+                "index_dynamic": True,
+                "store_dynamic": False,
+                "type_field": "_type",
+                "types": {
+                    f"{scope_name}.{collection_name}": {
+                        "dynamic": True,
+                        "enabled": True,
+                        "properties": {
+                            "embedding": {
+                                "enabled": True,
+                                "dynamic": False,
+                                "fields": [
+                                    {
+                                        "dims": 1536,
+                                        "index": True,
+                                        "name": "embedding",
+                                        "similarity": "dot_product",
+                                        "type": "vector",
+                                        "vector_index_optimized_for": "recall"
+                                    }
+                                ]
+                            },
+                            "text": {
+                                "enabled": True,
+                                "dynamic": False,
+                                "fields": [
+                                    {
+                                        "index": True,
+                                        "name": "text",
+                                        "store": True,
+                                        "type": "text"
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                }
+            },
+            "store": {
+                "indexType": "scorch",
+                "segmentVersion": 16
+            }
+        },
+        "sourceType": "gocbcore",
+        "sourceName": bucket_name,
+        "sourceParams": {},
+        "planParams": {
+            "maxPartitionsPerPIndex": 64,
+            "indexPartitions": 16,
+            "numReplicas": 0
+        }
+    }
+    
+    try:
+        # Create or update the search index
+        scope_index_manager.upsert_index(SearchIndex.from_json(index_definition))
+        st.info(f"FTS index '{index_name}' created/updated successfully")
+    except Exception as e:
+        error_msg = str(e)
+        # Handle the case where index already exists gracefully
+        if "already exists" in error_msg.lower() or "QueryIndexAlreadyExistsException" in error_msg:
+            st.info(f"✅ FTS index '{index_name}' already exists")
+        else:
+            st.warning(f"Could not create FTS index '{index_name}': {error_msg[:200]}")
+
+
 @st.cache_resource()
 def get_vector_store(
     _cluster,
@@ -178,6 +277,9 @@ if __name__ == "__main__":
 
         # Ensure scope and collection exist
         ensure_scope_and_collection(cluster, DB_BUCKET, DB_SCOPE, DB_COLLECTION)
+
+        # Create FTS index
+        create_fts_index(cluster, DB_BUCKET, DB_SCOPE, DB_COLLECTION, INDEX_NAME)
 
         vector_store = get_vector_store(
             cluster,
