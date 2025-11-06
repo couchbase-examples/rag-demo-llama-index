@@ -87,100 +87,11 @@ The application **automatically creates the FTS index** when it starts up using 
 
 The index definition uses dynamic type mapping based on your scope and collection names (e.g., `{scope_name}.{collection_name}`).
 
-#### Manual Index Creation (Optional)
-
 If you prefer to create the index manually through the Couchbase UI, you can do so:
 
 - [Couchbase Capella](https://docs.couchbase.com/cloud/search/import-search-index.html)
 
-  - Copy the index definition below to a new file `index.json`
-  - Import the file in Capella using the instructions in the documentation
-  - Click on Create Index to create the index
-
-- [Couchbase Server](https://docs.couchbase.com/server/current/search/import-search-index.html)
-
-  - Click on Search -> Add Index -> Import
-  - Copy the following Index definition in the Import screen
-  - Click on Create Index to create the index
-
-#### Index Definition (for manual creation)
-
-Here, we are creating the index `pdf_search` on the documents in the `docs` collection within the `shared` scope in the bucket `pdf_docs`. The Vector field is set to `embedding` with 1536 dimensions and the text field set to `text`. We are also indexing and storing all the fields under `metadata` in the document as a dynamic mapping to account for varying document structures. The similarity metric is set to `dot_product`. If there is a change in these parameters, please adapt the index accordingly.
-
-```json
-{
-  "name": "pdf_search",
-  "type": "fulltext-index",
-  "params": {
-      "doc_config": {
-          "docid_prefix_delim": "",
-          "docid_regexp": "",
-          "mode": "scope.collection.type_field",
-          "type_field": "type"
-      },
-      "mapping": {
-          "default_analyzer": "standard",
-          "default_datetime_parser": "dateTimeOptional",
-          "default_field": "_all",
-          "default_mapping": {
-              "dynamic": true,
-              "enabled": false
-          },
-          "default_type": "_default",
-          "docvalues_dynamic": false,
-          "index_dynamic": true,
-          "store_dynamic": false,
-          "type_field": "_type",
-          "types": {
-              "shared.docs": {
-                  "dynamic": true,
-                  "enabled": true,
-                  "properties": {
-                      "embedding": {
-                          "enabled": true,
-                          "dynamic": false,
-                          "fields": [
-                              {
-                                  "dims": 1536,
-                                  "index": true,
-                                  "name": "embedding",
-                                  "similarity": "dot_product",
-                                  "type": "vector",
-                                  "vector_index_optimized_for": "recall"
-                              }
-                          ]
-                      },
-                      "text": {
-                          "enabled": true,
-                          "dynamic": false,
-                          "fields": [
-                              {
-                                  "index": true,
-                                  "name": "text",
-                                  "store": true,
-                                  "type": "text"
-                              }
-                          ]
-                      }
-                  }
-              }
-          }
-      },
-      "store": {
-          "indexType": "scorch",
-          "segmentVersion": 16
-      }
-  },
-  "sourceType": "gocbcore",
-  "sourceName": "pdf_docs",
-  "sourceParams": {},
-  "planParams": {
-      "maxPartitionsPerPIndex": 64,
-      "indexPartitions": 16,
-      "numReplicas": 0
-  }
-}
-```
+  - Import the `index.json` file in FTS fodler in Capella using the instructions in the above documentation.
 
 ### Run the FTS application
 
@@ -225,15 +136,11 @@ Couchbase offers different types of vector indexes for GSI-based vector search:
 
 For more details, see the [Couchbase Vector Index documentation](https://docs.couchbase.com/server/current/vector-index/use-vector-indexes.html).
 
-### Index Configuration (Optional)
-
-While the application works without creating indexes manually, you can optionally create a vector index for better performance.
-
 > **Important:** The vector index should be created after ingesting the documents (uploading PDFs).
 
-**Creating Vector Index via SQL++:**
+**Example of Creating Vector Index via SQL++:**
 
-After uploading your PDFs, you can create a vector index using a SQL++ query executed through the application. The application includes a `create_vector_index()` function that creates the index with the following configuration:
+After uploading your PDFs, vector index is create using the below SQL++ query executed through the application. The application includes a `create_vector_index()` function that creates the index with the following configuration:
 
 ```python
 # Example of how the vector index is created in the code
@@ -290,4 +197,4 @@ streamlit run GSI/chat_with_pdf_query.py
 
 ---
 
-> **Note:** Upload a PDF document before asking questions.
+> **Note:** Upload a PDF document before asking questions, however the application still works if the data is already present in the capella.

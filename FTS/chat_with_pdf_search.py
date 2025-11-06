@@ -409,6 +409,9 @@ if __name__ == "__main__":
                 message_placeholder = st.empty()
 
             # Use the session-specific RAG engine if available, otherwise use persistent one
+            # if pdf is not uploaded in the session, then use the persistent one
+            # otherwise use the chat engine from the session 
+            # this is done so that questions can be answered even if pdf is not uploaded in this session and data may be present from previous sessions
             rag_engine = st.session_state.chat_engine_rag if st.session_state.chat_engine_rag is not None else persistent_chat_engine_rag
             
             try:
