@@ -2,6 +2,7 @@ import os
 import tempfile
 
 import streamlit as st
+import json
 
 from llama_index.core import (
     VectorStoreIndex,
@@ -114,79 +115,8 @@ def create_fts_index(
         cluster.bucket(bucket_name).scope(scope_name).search_indexes()
     )
     
-    index_definition = {
-        "name": index_name,
-        "type": "fulltext-index",
-        "params": {
-            "doc_config": {
-                "docid_prefix_delim": "",
-                "docid_regexp": "",
-                "mode": "scope.collection.type_field",
-                "type_field": "type"
-            },
-            "mapping": {
-                "default_analyzer": "standard",
-                "default_datetime_parser": "dateTimeOptional",
-                "default_field": "_all",
-                "default_mapping": {
-                    "dynamic": True,
-                    "enabled": False
-                },
-                "default_type": "_default",
-                "docvalues_dynamic": False,
-                "index_dynamic": True,
-                "store_dynamic": False,
-                "type_field": "_type",
-                "types": {
-                    f"{scope_name}.{collection_name}": {
-                        "dynamic": True,
-                        "enabled": True,
-                        "properties": {
-                            "embedding": {
-                                "enabled": True,
-                                "dynamic": False,
-                                "fields": [
-                                    {
-                                        "dims": 1536,
-                                        "index": True,
-                                        "name": "embedding",
-                                        "similarity": "dot_product",
-                                        "type": "vector",
-                                        "vector_index_optimized_for": "recall"
-                                    }
-                                ]
-                            },
-                            "text": {
-                                "enabled": True,
-                                "dynamic": False,
-                                "fields": [
-                                    {
-                                        "index": True,
-                                        "name": "text",
-                                        "store": True,
-                                        "type": "text"
-                                    }
-                                ]
-                            }
-                        }
-                    }
-                }
-            },
-            "store": {
-                "indexType": "scorch",
-                "segmentVersion": 16
-            }
-        },
-        "sourceType": "gocbcore",
-        "sourceName": bucket_name,
-        "sourceParams": {},
-        "planParams": {
-            "maxPartitionsPerPIndex": 64,
-            "indexPartitions": 16,
-            "numReplicas": 0
-        }
-    }
-    
+    with open ('FTS/index.json', 'r') as f:
+        index_definition = json.load(f)   
     try:
         # Create or update the search index
         scope_index_manager.upsert_index(SearchIndex.from_json(index_definition))
