@@ -115,8 +115,20 @@ def create_fts_index(
         cluster.bucket(bucket_name).scope(scope_name).search_indexes()
     )
     
-    with open ('FTS/index.json', 'r') as f:
-        index_definition = json.load(f)   
+    # Read the index template and replace placeholders with actual values
+    index_json_path = os.path.join(os.path.dirname(__file__), 'index.json')
+    with open(index_json_path, 'r') as f:
+        index_json_str = f.read()
+    
+    # Replace placeholders with actual environment values
+    index_json_str = index_json_str.replace('<INDEX_NAME>', index_name)
+    index_json_str = index_json_str.replace('<BUCKET_NAME>', bucket_name)
+    index_json_str = index_json_str.replace('<SCOPE_NAME>', scope_name)
+    index_json_str = index_json_str.replace('<COLLECTION_NAME>', collection_name)
+    
+    # Parse the modified JSON
+    index_definition = json.loads(index_json_str)
+    
     try:
         # Create or update the search index
         scope_index_manager.upsert_index(SearchIndex.from_json(index_definition))
