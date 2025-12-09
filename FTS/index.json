@@ -62,7 +62,7 @@
       }
   },
   "sourceType": "gocbcore",
-  "sourceName": "pdf_docs",
+  "sourceName": "demos",
   "sourceParams": {},
   "planParams": {
       "maxPartitionsPerPIndex": 64,
