@@ -115,19 +115,107 @@ def create_fts_index(
         cluster.bucket(bucket_name).scope(scope_name).search_indexes()
     )
     
-    # Read the index template and replace placeholders with actual values
-    index_json_path = os.path.join(os.path.dirname(__file__), 'index.json')
-    with open(index_json_path, 'r') as f:
-        index_json_str = f.read()
-    
-    # Replace placeholders with actual environment values
-    index_json_str = index_json_str.replace('<INDEX_NAME>', index_name)
-    index_json_str = index_json_str.replace('<BUCKET_NAME>', bucket_name)
-    index_json_str = index_json_str.replace('<SCOPE_NAME>', scope_name)
-    index_json_str = index_json_str.replace('<COLLECTION_NAME>', collection_name)
-    
-    # Parse the modified JSON
-    index_definition = json.loads(index_json_str)
+    # Try to read the index template, fallback to inline definition if file not found
+    try:
+        # Try multiple possible paths for the index.json file
+        possible_paths = [
+            os.path.join(os.path.dirname(__file__), 'index.json'),
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), 'index.json'),
+            'FTS/index.json',
+            'index.json'
+        ]
+        
+        index_json_str = None
+        for path in possible_paths:
+            if os.path.exists(path):
+                with open(path, 'r') as f:
+                    index_json_str = f.read()
+                break
+        
+        if index_json_str:
+            # Replace placeholders with actual environment values
+            index_json_str = index_json_str.replace('<INDEX_NAME>', index_name)
+            index_json_str = index_json_str.replace('<BUCKET_NAME>', bucket_name)
+            index_json_str = index_json_str.replace('<SCOPE_NAME>', scope_name)
+            index_json_str = index_json_str.replace('<COLLECTION_NAME>', collection_name)
+            index_definition = json.loads(index_json_str)
+        else:
+            raise FileNotFoundError("index.json not found")
+            
+    except (FileNotFoundError, json.JSONDecodeError):
+        # Fallback: Generate index definition inline
+        index_definition = {
+            "name": index_name,
+            "type": "fulltext-index",
+            "params": {
+                "doc_config": {
+                    "docid_prefix_delim": "",
+                    "docid_regexp": "",
+                    "mode": "scope.collection.type_field",
+                    "type_field": "type"
+                },
+                "mapping": {
+                    "default_analyzer": "standard",
+                    "default_datetime_parser": "dateTimeOptional",
+                    "default_field": "_all",
+                    "default_mapping": {
+                        "dynamic": True,
+                        "enabled": False
+                    },
+                    "default_type": "_default",
+                    "docvalues_dynamic": False,
+                    "index_dynamic": True,
+                    "store_dynamic": False,
+                    "type_field": "_type",
+                    "types": {
+                        f"{scope_name}.{collection_name}": {
+                            "dynamic": True,
+                            "enabled": True,
+                            "properties": {
+                                "embedding": {
+                                    "enabled": True,
+                                    "dynamic": False,
+                                    "fields": [
+                                        {
+                                            "dims": 1536,
+                                            "index": True,
+                                            "name": "embedding",
+                                            "similarity": "dot_product",
+                                            "type": "vector",
+                                            "vector_index_optimized_for": "recall"
+                                        }
+                                    ]
+                                },
+                                "text": {
+                                    "enabled": True,
+                                    "dynamic": False,
+                                    "fields": [
+                                        {
+                                            "index": True,
+                                            "name": "text",
+                                            "store": True,
+                                            "type": "text"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                },
+                "store": {
+                    "indexType": "scorch",
+                    "segmentVersion": 16
+                }
+            },
+            "sourceType": "gocbcore",
+            "sourceName": bucket_name,
+            "sourceParams": {},
+            "planParams": {
+                "maxPartitionsPerPIndex": 64,
+                "indexPartitions": 16,
+                "numReplicas": 0
+            }
+        }
     
     try:
         # Create or update the search index
