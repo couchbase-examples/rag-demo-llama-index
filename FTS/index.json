@@ -1,5 +1,5 @@
 {
-  "name": "pdf_search",
+  "name": "<INDEX_NAME>",
   "type": "fulltext-index",
   "params": {
       "doc_config": {
@@ -22,7 +22,7 @@
           "store_dynamic": false,
           "type_field": "_type",
           "types": {
-              "shared.docs": {
+              "<SCOPE_NAME>.<COLLECTION_NAME>": {
                   "dynamic": true,
                   "enabled": true,
                   "properties": {
@@ -62,7 +62,7 @@
       }
   },
   "sourceType": "gocbcore",
-  "sourceName": "demos",
+  "sourceName": "<BUCKET_NAME>",
   "sourceParams": {},
   "planParams": {
       "maxPartitionsPerPIndex": 64,
