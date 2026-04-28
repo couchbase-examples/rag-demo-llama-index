@@ -2,5 +2,5 @@ llama-index-vector-stores-couchbase==0.6.0
 llama-index-llms-openai==0.6.23
 llama-index-embeddings-openai==0.5.1
 llama-index-readers-file==0.6.0
-streamlit==1.54.0
+streamlit==1.56.0
 nltk==3.9.3
