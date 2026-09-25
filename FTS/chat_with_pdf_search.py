@@ -15,7 +15,6 @@ from llama_index.core.chat_engine.simple import SimpleChatEngine
 from llama_index.llms.openai import OpenAI
 from llama_index.vector_stores.couchbase import CouchbaseSearchVectorStore
 from llama_index.embeddings.openai import OpenAIEmbedding
-from couchbase.management.collections import CollectionSpec
 from couchbase.management.search import SearchIndex
 from couchbase.exceptions import (
     ScopeAlreadyExistsException,
@@ -96,7 +95,7 @@ def ensure_scope_and_collection(
 
     # Ensure collection exists
     try:
-        cm.create_collection(CollectionSpec(collection_name, scope_name))
+        cm.create_collection(scope_name, collection_name)
     except CollectionAlreadyExistsException:
         pass
     except Exception as e:
