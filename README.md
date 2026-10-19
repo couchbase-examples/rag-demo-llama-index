@@ -69,6 +69,22 @@ TIKTOKEN_CACHE_DIR = "/tmp/tiktoken-cache"
 
 The last two parameters are required only if you are deploying on the streamlit cloud.
 
+## Tests
+
+`AGENTS.md` describes the test tiers. A no-secret Streamlit + Playwright smoke
+test boots both apps with Couchbase and OpenAI faked, and an optional OpenAI
+provider smoke test runs when `OPENAI_API_KEY` is set:
+
+```bash
+pip install -r requirements-dev.txt
+playwright install chromium
+pytest tests/test_streamlit_smoke.py -v
+pytest tests/test_openai_provider.py -v -rs
+```
+
+Dependency-update PRs still need a manual live validation against Couchbase
+and OpenAI; see `AGENTS.md` for the checklist.
+
 ## Approach 1: FTS-Based Vector Search
 
 ### Prerequisites
